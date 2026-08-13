@@ -1,0 +1,170 @@
+name: Dispatch builds
+
+# Split a branch's package list into shards and fire one build-shard run per
+# shard per variant. A run is capped at 256 jobs, so the full sweep cannot be a
+# single matrix; this is the orchestrator that works around that.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Bioconductor branch
+        type: choice
+        options: [devel, RELEASE_3_22, RELEASE_3_21]
+        default: devel
+      variant:
+        description: Which base image to build against
+        type: choice
+        options: [both, bioconductor, bioc2u]
+        default: both
+      shard_size:
+        description: Packages per shard (max 255)
+        type: string
+        default: "200"
+      max_parallel:
+        description: Concurrent builds within each shard
+        type: string
+        default: "16"
+      filter:
+        description: "Optional: only packages matching this regex"
+        type: string
+        default: ""
+      limit:
+        description: "Optional: stop after this many packages (0 = all)"
+        type: string
+        default: "0"
+      strict:
+        description: Fail a build if any requested package does not install
+        type: boolean
+        default: true
+      push:
+        description: Push images to the registry
+        type: boolean
+        default: true
+      dry_run:
+        description: Print the plan without dispatching anything
+        type: boolean
+        default: false
+
+run-name: "dispatch ${{ inputs.variant }} / ${{ inputs.branch }}${{ inputs.dry_run && ' (dry run)' || '' }}"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: dispatch-${{ inputs.branch }}-${{ inputs.variant }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Build the shard plan
+        id: plan
+        env:
+          BRANCH: ${{ inputs.branch }}
+          SHARD_SIZE: ${{ inputs.shard_size }}
+          FILTER: ${{ inputs.filter }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys, pathlib
+
+          branch = os.environ["BRANCH"]
+          size = int(os.environ["SHARD_SIZE"])
+          if not 1 <= size <= 255:
+              sys.exit(f"::error::shard_size must be between 1 and 255, got {size}")
+
+          listing = pathlib.Path("manifests") / branch / "packages.txt"
+          if not listing.is_file():
+              sys.exit(f"::error::{listing} is missing; run the Generate manifest workflow for {branch} first")
+
+          pkgs = [p.strip() for p in listing.read_text().splitlines() if p.strip()]
+
+          pattern = os.environ.get("FILTER", "").strip()
+          if pattern:
+              try:
+                  rx = re.compile(pattern)
+              except re.error as exc:
+                  sys.exit(f"::error::invalid filter regex: {exc}")
+              pkgs = [p for p in pkgs if rx.search(p)]
+
+          limit = int(os.environ.get("LIMIT") or 0)
+          if limit > 0:
+              pkgs = pkgs[:limit]
+
+          if not pkgs:
+              sys.exit("::error::no packages selected")
+
+          shards = [pkgs[i:i + size] for i in range(0, len(pkgs), size)]
+          plan = [
+              {"shard": f"{i}/{len(shards)}", "packages": json.dumps(s), "count": len(s)}
+              for i, s in enumerate(shards, start=1)
+          ]
+          pathlib.Path("plan.json").write_text(json.dumps(plan))
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"total={len(pkgs)}\n")
+              fh.write(f"shards={len(shards)}\n")
+          print(f"{len(pkgs)} packages -> {len(shards)} shards of up to {size}")
+          PY
+
+      - name: Dispatch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ inputs.branch }}
+          VARIANT: ${{ inputs.variant }}
+          MAX_PARALLEL: ${{ inputs.max_parallel }}
+          STRICT: ${{ inputs.strict }}
+          PUSH: ${{ inputs.push }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REF: ${{ github.ref_name }}
+          TOTAL: ${{ steps.plan.outputs.total }}
+          SHARDS: ${{ steps.plan.outputs.shards }}
+        run: |
+          set -euo pipefail
+          if [ "$VARIANT" = "both" ]; then
+            variants="bioconductor bioc2u"
+          else
+            variants="$VARIANT"
+          fi
+
+          {
+            echo "## Dispatch plan"
+            echo
+            echo "branch \`${BRANCH}\`, ${TOTAL} packages, ${SHARDS} shards per variant"
+            echo
+            echo "| variant | shard | packages |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for variant in $variants; do
+            while read -r shard packages count; do
+              echo "| ${variant} | ${shard} | ${count} |" >> "$GITHUB_STEP_SUMMARY"
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "[dry run] ${variant} shard ${shard} (${count} packages)"
+                continue
+              fi
+              echo "dispatching ${variant} shard ${shard} (${count} packages)"
+              gh workflow run build-shard.yml \
+                --ref "$REF" \
+                -f branch="$BRANCH" \
+                -f variant="$variant" \
+                -f packages="$packages" \
+                -f shard="$shard" \
+                -f max_parallel="$MAX_PARALLEL" \
+                -f strict="$STRICT" \
+                -f push="$PUSH"
+              # The dispatch API is rate limited; a short pause keeps a full
+              # sweep from tripping it.
+              sleep 3
+            done < <(jq -r '.[] | [.shard, (.packages|@json), .count] | @tsv' plan.json)
+          done
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "_dry run — nothing was dispatched_" >> "$GITHUB_STEP_SUMMARY"
+          fi

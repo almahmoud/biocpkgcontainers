@@ -1,0 +1,99 @@
+name: Generate manifest
+
+# Resolve, for every Bioconductor software package on a branch, the complete
+# set of packages that has to be installed alongside it. The result is committed
+# so that build jobs only need a checkout to know what to install.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Bioconductor branch
+        type: choice
+        options: [devel, RELEASE_3_22, RELEASE_3_21]
+        default: devel
+      repos:
+        description: Bioconductor repositories to generate images for
+        type: string
+        default: BioCsoft
+      commit:
+        description: Commit the manifest back to the repository
+        type: boolean
+        default: true
+  schedule:
+    # Bioconductor devel moves daily; refresh the manifest every Monday 04:00 UTC.
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manifest-${{ inputs.branch || 'devel' }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BRANCH: ${{ inputs.branch || 'devel' }}
+      REPOS: ${{ inputs.repos || 'BioCsoft' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Resolve dependencies inside the Bioconductor container
+        run: |
+          set -euo pipefail
+          # Run in the branch's own container so BiocManager reports the matching
+          # Bioconductor version and available.packages() filters against the
+          # exact R version the images will be built on.
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            "ghcr.io/bioconductor/bioconductor:${BRANCH}" \
+            Rscript scripts/bioc_pkgs.R \
+              --outdir="manifests/${BRANCH}" \
+              --repos="${REPOS}"
+          sudo chown -R "$(id -u):$(id -g)" "manifests/${BRANCH}"
+
+      - name: Report
+        run: |
+          set -euo pipefail
+          dir="manifests/${BRANCH}"
+          {
+            echo "## Manifest for \`${BRANCH}\`"
+            echo
+            echo "- Bioconductor: \`$(cat "$dir/bioc_version")\`"
+            echo "- R: \`$(cat "$dir/r_version")\`"
+            echo "- packages: **$(wc -l < "$dir/packages.txt")**"
+            echo "- unresolvable declared dependencies: $(wc -l < "$dir/unresolved.txt")"
+            echo
+            echo '### Largest install closures'
+            echo
+            echo '| package | packages to install |'
+            echo '| --- | --- |'
+            tail -n +2 "$dir/summary.csv" | tr -d '"' \
+              | sort -t, -k4 -nr | head -10 \
+              | awk -F, '{printf "| %s | %s |\n", $1, $4}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: manifest-${{ env.BRANCH }}
+          path: manifests/${{ env.BRANCH }}
+          retention-days: 30
+
+      - name: Commit manifest
+        if: inputs.commit != false
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "manifests/${BRANCH}"
+          if git diff --cached --quiet; then
+            echo "manifest unchanged"
+            exit 0
+          fi
+          changed=$(git diff --cached --name-only | wc -l)
+          git commit -m "Update ${BRANCH} manifest ($(cat "manifests/${BRANCH}/bioc_version"), ${changed} files)"
+          git push

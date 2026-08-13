@@ -1,0 +1,167 @@
+name: Build a Bioconductor package image
+description: >-
+  Build and push one container image holding a Bioconductor package together
+  with everything it declares in DESCRIPTION, including Suggests.
+
+inputs:
+  package:
+    description: Bioconductor package name, in its original capitalisation.
+    required: true
+  branch:
+    description: Bioconductor branch (devel or RELEASE_3_XX). Used as the image tag.
+    required: true
+  variant:
+    description: bioconductor or bioc2u.
+    required: true
+  base-image:
+    description: Fully qualified base image to build FROM.
+    required: true
+  manifest-dir:
+    description: Directory holding packages.txt and pkglists/.
+    required: true
+  registry-token:
+    description: Token with packages:write, normally secrets.GITHUB_TOKEN.
+    required: true
+  owner:
+    description: Registry namespace. Defaults to the repository owner.
+    required: false
+    default: ${{ github.repository_owner }}
+  strict:
+    description: Fail the build if any requested package does not install.
+    required: false
+    default: "true"
+  push:
+    description: Push the image. Set false to build only.
+    required: false
+    default: "true"
+
+outputs:
+  image:
+    description: Fully qualified image reference that was built.
+    value: ${{ steps.names.outputs.image }}
+  installed:
+    description: Number of packages the image was asked to install.
+    value: ${{ steps.context.outputs.count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Reclaim runner disk
+      shell: bash
+      run: |
+        # Images carrying a full Suggests closure routinely exceed what is left
+        # on a stock runner, and the failure mode is an opaque ENOSPC deep in a
+        # layer write. Drop the preinstalled toolchains we never use.
+        before=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                    /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell \
+                    /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+        sudo docker image prune --all --force >/dev/null 2>&1 || true
+        after=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+        echo "free disk: ${before}G -> ${after}G"
+
+    - name: Resolve image name
+      id: names
+      shell: bash
+      env:
+        OWNER: ${{ inputs.owner }}
+        PACKAGE: ${{ inputs.package }}
+        VARIANT: ${{ inputs.variant }}
+        BRANCH: ${{ inputs.branch }}
+      run: |
+        set -euo pipefail
+        # These end up in a filesystem path and a registry tag; constrain them to
+        # what an R package name and a Bioconductor branch can actually be.
+        if ! printf '%s' "$PACKAGE" | grep -qE '^[A-Za-z][A-Za-z0-9.]*$'; then
+          echo "::error::'$PACKAGE' is not a valid R package name"; exit 1
+        fi
+        if ! printf '%s' "$BRANCH" | grep -qE '^(devel|RELEASE_[0-9]+_[0-9]+)$'; then
+          echo "::error::'$BRANCH' is not a valid Bioconductor branch"; exit 1
+        fi
+        owner=$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')
+        pkg_lc=$(printf '%s' "$PACKAGE" | tr '[:upper:]' '[:lower:]')
+        case "$VARIANT" in
+          bioconductor) repo="biocpkg-${pkg_lc}" ;;
+          bioc2u)       repo="biocpkg-bioc2u-${pkg_lc}" ;;
+          *) echo "::error::unknown variant '$VARIANT'"; exit 1 ;;
+        esac
+        # Registry paths are lowercase-only; the manifest generator guarantees
+        # the lowercased package names stay unique.
+        echo "image=ghcr.io/${owner}/${repo}:${BRANCH}" >> "$GITHUB_OUTPUT"
+
+    - name: Assemble build context
+      id: context
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        MANIFEST_DIR: ${{ inputs.manifest-dir }}
+      run: |
+        set -euo pipefail
+        list="${MANIFEST_DIR}/pkglists/${PACKAGE}.txt"
+        if [ ! -f "$list" ]; then
+          echo "::error::no package list at ${list}; regenerate the manifest for this branch"
+          exit 1
+        fi
+        ctx="${RUNNER_TEMP}/ctx"
+        mkdir -p "$ctx"
+        cp docker/Dockerfile docker/install.R "$ctx/"
+        cp "$list" "$ctx/pkgs.txt"
+        count=$(grep -c '[^[:space:]]' "$ctx/pkgs.txt")
+        echo "count=${count}" >> "$GITHUB_OUTPUT"
+        echo "dir=${ctx}" >> "$GITHUB_OUTPUT"
+        echo "${PACKAGE}: ${count} packages to install"
+
+    - name: Read package version from manifest
+      id: meta
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        MANIFEST_DIR: ${{ inputs.manifest-dir }}
+      run: |
+        set -euo pipefail
+        version=$(awk -F',' -v p="\"${PACKAGE}\"" 'NR>1 && $1==p {gsub(/"/,"",$3); print $3; exit}' \
+                  "${MANIFEST_DIR}/summary.csv" 2>/dev/null || true)
+        echo "version=${version:-unknown}" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+    - name: Log in to GHCR
+      if: inputs.push == 'true'
+      uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.registry-token }}
+
+    - name: Build and push
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      with:
+        context: ${{ steps.context.outputs.dir }}
+        file: ${{ steps.context.outputs.dir }}/Dockerfile
+        push: ${{ inputs.push == 'true' }}
+        load: false
+        provenance: false
+        tags: ${{ steps.names.outputs.image }}
+        build-args: |
+          BASE_IMAGE=${{ inputs.base-image }}
+          PACKAGE=${{ inputs.package }}
+          PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+          BIOC_BRANCH=${{ inputs.branch }}
+          VARIANT=${{ inputs.variant }}
+          STRICT=${{ inputs.strict == 'true' && '1' || '0' }}
+
+    - name: Summary
+      if: always()
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        IMAGE: ${{ steps.names.outputs.image }}
+        COUNT: ${{ steps.context.outputs.count }}
+        BASE: ${{ inputs.base-image }}
+      run: |
+        {
+          echo "| package | packages installed | base | image |"
+          echo "| --- | --- | --- | --- |"
+          echo "| \`${PACKAGE}\` | ${COUNT:-?} | \`${BASE}\` | \`${IMAGE}\` |"
+        } >> "$GITHUB_STEP_SUMMARY"

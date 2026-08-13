@@ -1,0 +1,80 @@
+name: Build one package
+
+# Rebuild a single package image, for retries and spot checks. The sweep goes
+# through dispatch.yml; this is the manual escape hatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package name, in its Bioconductor capitalisation
+        type: string
+        required: true
+      branch:
+        description: Bioconductor branch
+        type: choice
+        options: [devel, RELEASE_3_22, RELEASE_3_21]
+        default: devel
+      variant:
+        description: Which base image to build against
+        type: choice
+        options: [bioconductor, bioc2u]
+        default: bioconductor
+      base_image:
+        description: Override the base image
+        type: string
+        default: ""
+      strict:
+        description: Fail the build if any requested package does not install
+        type: boolean
+        default: true
+      push:
+        description: Push the image to the registry
+        type: boolean
+        default: true
+
+run-name: "${{ inputs.package }} (${{ inputs.variant }} / ${{ inputs.branch }})"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: image-${{ inputs.variant }}-${{ inputs.branch }}-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Resolve base image
+        id: base
+        env:
+          VARIANT: ${{ inputs.variant }}
+          BRANCH: ${{ inputs.branch }}
+          OVERRIDE: ${{ inputs.base_image }}
+        run: |
+          set -euo pipefail
+          if [ -n "$OVERRIDE" ]; then
+            base="$OVERRIDE"
+          elif [ "$VARIANT" = "bioc2u" ]; then
+            base="ghcr.io/bioconductor/bioc2u-user:noble"
+          else
+            base="ghcr.io/bioconductor/bioconductor:${BRANCH}"
+          fi
+          echo "image=${base}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: ./.github/actions/build-package
+        with:
+          package: ${{ inputs.package }}
+          branch: ${{ inputs.branch }}
+          variant: ${{ inputs.variant }}
+          base-image: ${{ steps.base.outputs.image }}
+          manifest-dir: manifests/${{ inputs.branch }}
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          strict: ${{ inputs.strict }}
+          push: ${{ inputs.push }}
