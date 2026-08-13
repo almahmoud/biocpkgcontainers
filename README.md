@@ -56,6 +56,10 @@ Run **Dispatch builds**. Useful inputs:
 - `max_parallel` — concurrent builds inside one shard, default 16
 - `filter` — regex, to sweep a subset
 - `limit` — stop after N packages
+- `dispatch_delay` — seconds between dispatches, default 10. The
+  `workflow_dispatch` API returns 500 under a rapid burst; each shard is retried
+  with backoff, and a shard that never lands fails the run rather than quietly
+  disappearing from the sweep. Raise this if you still see 500s.
 - `dry_run` — print the plan and dispatch nothing
 
 Start with a dry run, then a small real one:

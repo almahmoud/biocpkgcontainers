@@ -75,7 +75,18 @@ jobs:
               *) echo "::error::variant must be 'bioconductor' or 'bioc2u', got '$VARIANT'"; exit 1 ;;
             esac
           fi
-          count=$(printf '%s' "$PACKAGES" | jq 'length')
+          if ! count=$(printf '%s' "$PACKAGES" | jq -e '
+                if type != "array" then
+                  "packages must be a JSON array, got \(type)" | error
+                elif any(.[]; type != "string") then
+                  "packages must contain only strings" | error
+                elif any(.[]; test("^[A-Za-z][A-Za-z0-9.]*$") | not) then
+                  "packages contains an invalid package name" | error
+                else length end' 2>&1); then
+            echo "::error::invalid packages input: ${count}"
+            echo "::error::received: ${PACKAGES}"
+            exit 1
+          fi
           if [ "$count" -eq 0 ]; then
             echo "::error::shard contains no packages"; exit 1
           fi

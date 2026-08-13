@@ -41,6 +41,10 @@ on:
         description: Push images to the registry
         type: boolean
         default: true
+      dispatch_delay:
+        description: Seconds to wait between dispatches
+        type: string
+        default: "10"
       dry_run:
         description: Print the plan without dispatching anything
         type: boolean
@@ -99,9 +103,16 @@ jobs:
           if not pkgs:
               sys.exit("::error::no packages selected")
 
+          bad = [p for p in pkgs if not re.fullmatch(r"[A-Za-z][A-Za-z0-9.]*", p)]
+          if bad:
+              sys.exit(f"::error::manifest contains invalid package names: {bad[:5]}")
+
           shards = [pkgs[i:i + size] for i in range(0, len(pkgs), size)]
+          # packages stays a real JSON array here; the dispatch step serialises it
+          # once with `jq -c`. Encoding it to a string at this point would get
+          # double-encoded downstream.
           plan = [
-              {"shard": f"{i}/{len(shards)}", "packages": json.dumps(s), "count": len(s)}
+              {"shard": f"{i}/{len(shards)}", "packages": s, "count": len(s)}
               for i, s in enumerate(shards, start=1)
           ]
           pathlib.Path("plan.json").write_text(json.dumps(plan))
@@ -121,6 +132,7 @@ jobs:
           STRICT: ${{ inputs.strict }}
           PUSH: ${{ inputs.push }}
           DRY_RUN: ${{ inputs.dry_run }}
+          DELAY: ${{ inputs.dispatch_delay }}
           REF: ${{ github.ref_name }}
           TOTAL: ${{ steps.plan.outputs.total }}
           SHARDS: ${{ steps.plan.outputs.shards }}
@@ -141,30 +153,61 @@ jobs:
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+          # The workflow_dispatch API returns 500 under a rapid burst. Retry with
+          # backoff and treat a shard that never lands as a failure of this run,
+          # rather than letting it disappear from a sweep nobody rechecks.
+          dispatch_shard() {
+            local variant="$1" shard="$2" packages="$3"
+            local attempt=1 max=5 delay=5
+            while true; do
+              if gh workflow run build-shard.yml \
+                   --ref "$REF" \
+                   -f branch="$BRANCH" \
+                   -f variant="$variant" \
+                   -f packages="$packages" \
+                   -f shard="$shard" \
+                   -f max_parallel="$MAX_PARALLEL" \
+                   -f strict="$STRICT" \
+                   -f push="$PUSH"; then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::${variant} shard ${shard} failed to dispatch after ${max} attempts"
+                return 1
+              fi
+              echo "::warning::${variant} shard ${shard} dispatch failed (attempt ${attempt}/${max}); retrying in ${delay}s"
+              sleep "$delay"
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+          }
+
+          shard_total=$(jq 'length' plan.json)
+          failed=0
           for variant in $variants; do
-            while read -r shard packages count; do
+            for i in $(seq 0 $((shard_total - 1))); do
+              shard=$(jq -r ".[${i}].shard" plan.json)
+              count=$(jq -r ".[${i}].count" plan.json)
+              packages=$(jq -c ".[${i}].packages" plan.json)
+
               echo "| ${variant} | ${shard} | ${count} |" >> "$GITHUB_STEP_SUMMARY"
               if [ "$DRY_RUN" = "true" ]; then
-                echo "[dry run] ${variant} shard ${shard} (${count} packages)"
+                echo "[dry run] ${variant} shard ${shard} (${count} packages): ${packages}"
                 continue
               fi
               echo "dispatching ${variant} shard ${shard} (${count} packages)"
-              gh workflow run build-shard.yml \
-                --ref "$REF" \
-                -f branch="$BRANCH" \
-                -f variant="$variant" \
-                -f packages="$packages" \
-                -f shard="$shard" \
-                -f max_parallel="$MAX_PARALLEL" \
-                -f strict="$STRICT" \
-                -f push="$PUSH"
-              # The dispatch API is rate limited; a short pause keeps a full
-              # sweep from tripping it.
-              sleep 3
-            done < <(jq -r '.[] | [.shard, (.packages|@json), .count] | @tsv' plan.json)
+              if ! dispatch_shard "$variant" "$shard" "$packages"; then
+                failed=$((failed + 1))
+              fi
+              sleep "$DELAY"
+            done
           done
 
           if [ "$DRY_RUN" = "true" ]; then
             echo >> "$GITHUB_STEP_SUMMARY"
             echo "_dry run — nothing was dispatched_" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$failed" -gt 0 ]; then
+            echo >> "$GITHUB_STEP_SUMMARY"
+            echo "**${failed} shard(s) failed to dispatch.** Re-run with a narrower \`filter\`, or raise \`dispatch_delay\`." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
