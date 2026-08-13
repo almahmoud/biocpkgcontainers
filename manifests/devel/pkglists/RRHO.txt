@@ -1,0 +1,7 @@
+formatR
+futile.logger
+futile.options
+lambda.r
+lattice
+RRHO
+VennDiagram

@@ -1,0 +1,9 @@
+ade4
+iBBiG
+lattice
+MASS
+pixmap
+Rcpp
+RcppArmadillo
+sp
+xtable

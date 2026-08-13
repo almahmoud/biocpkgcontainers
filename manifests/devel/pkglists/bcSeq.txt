@@ -1,0 +1,17 @@
+bcSeq
+BiocGenerics
+Biostrings
+crayon
+evaluate
+generics
+highr
+IRanges
+knitr
+lattice
+Matrix
+Rcpp
+S4Vectors
+Seqinfo
+xfun
+XVector
+yaml

@@ -1,0 +1,10 @@
+BiocGenerics
+Biostrings
+crayon
+generics
+IRanges
+pwalign
+RUnit
+S4Vectors
+Seqinfo
+XVector

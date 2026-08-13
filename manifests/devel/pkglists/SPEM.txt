@@ -1,0 +1,16 @@
+Biobase
+BiocGenerics
+codetools
+digest
+future
+future.apply
+generics
+globals
+listenv
+numDeriv
+parallelly
+Rcpp
+RcppArmadillo
+Rsolnp
+SPEM
+truncnorm

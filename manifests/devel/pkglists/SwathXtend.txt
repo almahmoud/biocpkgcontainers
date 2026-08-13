@@ -1,0 +1,15 @@
+class
+cli
+e1071
+formatR
+futile.logger
+futile.options
+lambda.r
+lattice
+openxlsx
+proxy
+Rcpp
+stringi
+SwathXtend
+VennDiagram
+zip

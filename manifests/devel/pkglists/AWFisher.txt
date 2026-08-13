@@ -1,0 +1,12 @@
+AWFisher
+edgeR
+evaluate
+highr
+knitr
+lattice
+limma
+locfit
+statmod
+tightClust
+xfun
+yaml

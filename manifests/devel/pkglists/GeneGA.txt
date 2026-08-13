@@ -1,0 +1,12 @@
+ade4
+GeneGA
+hash
+lattice
+MASS
+nlme
+pixmap
+Rcpp
+RcppArmadillo
+segmented
+seqinr
+sp

@@ -1,0 +1,7 @@
+Biobase
+BiocGenerics
+bioDist
+generics
+KernSmooth
+lattice
+locfit

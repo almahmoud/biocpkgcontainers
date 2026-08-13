@@ -1,0 +1,8 @@
+BiocGenerics
+generics
+genomeIntervals
+GenomicRanges
+intervals
+IRanges
+S4Vectors
+Seqinfo

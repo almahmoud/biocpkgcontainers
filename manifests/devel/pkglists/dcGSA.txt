@@ -1,0 +1,17 @@
+BH
+BiocParallel
+codetools
+cpp11
+dcGSA
+evaluate
+formatR
+futile.logger
+futile.options
+highr
+knitr
+lambda.r
+lattice
+Matrix
+snow
+xfun
+yaml

@@ -1,0 +1,6 @@
+ABSSeq
+edgeR
+lattice
+limma
+locfit
+statmod

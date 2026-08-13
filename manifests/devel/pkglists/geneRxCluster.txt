@@ -1,0 +1,8 @@
+BiocGenerics
+generics
+geneRxCluster
+GenomicRanges
+IRanges
+RUnit
+S4Vectors
+Seqinfo

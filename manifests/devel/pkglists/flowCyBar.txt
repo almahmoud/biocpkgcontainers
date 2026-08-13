@@ -1,0 +1,14 @@
+bitops
+caTools
+cluster
+flowCyBar
+gplots
+gtools
+KernSmooth
+lattice
+MASS
+Matrix
+mgcv
+nlme
+permute
+vegan

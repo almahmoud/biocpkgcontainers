@@ -1,0 +1,8 @@
+combinat
+gdata
+genetics
+GeneticsPed
+gtools
+MASS
+mvtnorm
+RUnit

@@ -1,0 +1,15 @@
+boot
+corpcor
+lattice
+lme4
+MASS
+Matrix
+minqa
+nlme
+nloptr
+rbibutils
+Rcpp
+RcppEigen
+Rdpack
+reformulas
+snm

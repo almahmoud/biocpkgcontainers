@@ -1,0 +1,13 @@
+Biobase
+BiocGenerics
+dotCall64
+fields
+generics
+hwriter
+maps
+mclust
+RColorBrewer
+Rcpp
+spam
+SpeCond
+viridisLite

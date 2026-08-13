@@ -1,0 +1,8 @@
+BiocGenerics
+chromDraw
+generics
+GenomicRanges
+IRanges
+Rcpp
+S4Vectors
+Seqinfo

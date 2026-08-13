@@ -1,0 +1,6 @@
+edgeR
+lattice
+limma
+locfit
+methylMnM
+statmod

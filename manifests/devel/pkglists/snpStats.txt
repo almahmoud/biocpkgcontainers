@@ -1,0 +1,7 @@
+BiocGenerics
+generics
+hexbin
+lattice
+Matrix
+snpStats
+survival

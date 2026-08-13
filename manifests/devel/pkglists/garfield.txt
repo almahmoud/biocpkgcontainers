@@ -1,0 +1,6 @@
+evaluate
+garfield
+highr
+knitr
+xfun
+yaml

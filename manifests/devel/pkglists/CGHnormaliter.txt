@@ -1,0 +1,13 @@
+Biobase
+BiocGenerics
+CGHbase
+CGHcall
+CGHnormaliter
+DNAcopy
+generics
+impute
+limma
+marray
+snow
+snowfall
+statmod

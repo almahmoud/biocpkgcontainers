@@ -1,0 +1,7 @@
+BiocGenerics
+generics
+iClusterPlus
+irlba
+lattice
+Matrix
+RUnit

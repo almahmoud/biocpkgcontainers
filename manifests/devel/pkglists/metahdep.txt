@@ -1,0 +1,16 @@
+affy
+affyio
+affyPLM
+Biobase
+BiocGenerics
+BiocManager
+Biostrings
+crayon
+gcrma
+generics
+IRanges
+metahdep
+preprocessCore
+S4Vectors
+Seqinfo
+XVector

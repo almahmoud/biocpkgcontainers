@@ -1,0 +1,14 @@
+Biobase
+BiocGenerics
+class
+cluster
+e1071
+EBarrays
+generics
+geNetClassifier
+infotheo
+lattice
+leukemiasEset
+minet
+proxy
+RUnit

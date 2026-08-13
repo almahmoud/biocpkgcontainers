@@ -1,0 +1,4 @@
+bitops
+caTools
+RColorBrewer
+sSeq

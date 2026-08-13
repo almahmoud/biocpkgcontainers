@@ -1,0 +1,7 @@
+BiocGenerics
+generics
+GenomicRanges
+IRanges
+OmicCircos
+S4Vectors
+Seqinfo

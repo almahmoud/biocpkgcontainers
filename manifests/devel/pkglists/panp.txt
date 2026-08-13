@@ -1,0 +1,15 @@
+affy
+affyio
+Biobase
+BiocGenerics
+BiocManager
+Biostrings
+crayon
+gcrma
+generics
+IRanges
+panp
+preprocessCore
+S4Vectors
+Seqinfo
+XVector

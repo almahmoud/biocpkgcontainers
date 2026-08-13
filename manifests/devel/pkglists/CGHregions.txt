@@ -1,0 +1,8 @@
+Biobase
+BiocGenerics
+CGHbase
+CGHregions
+generics
+limma
+marray
+statmod

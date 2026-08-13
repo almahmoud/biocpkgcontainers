@@ -1,0 +1,11 @@
+arrayQuality
+gridBase
+HEEBOdata
+hexbin
+lattice
+limma
+marray
+mclust
+MEEBOdata
+RColorBrewer
+statmod

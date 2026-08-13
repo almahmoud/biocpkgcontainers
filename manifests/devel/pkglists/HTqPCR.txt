@@ -1,0 +1,16 @@
+affy
+affyio
+Biobase
+BiocGenerics
+BiocManager
+bitops
+caTools
+generics
+gplots
+gtools
+HTqPCR
+KernSmooth
+limma
+preprocessCore
+RColorBrewer
+statmod

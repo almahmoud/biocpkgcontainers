@@ -1,0 +1,10 @@
+BiocGenerics
+bitops
+generics
+graph
+KEGGgraph
+lpNet
+lpSolve
+RCurl
+Rgraphviz
+XML

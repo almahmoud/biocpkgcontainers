@@ -1,0 +1,8 @@
+bitops
+caTools
+gplots
+gtools
+KernSmooth
+pROC
+Rcpp
+switchBox

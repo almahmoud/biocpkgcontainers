@@ -1,0 +1,10 @@
+BiocGenerics
+Biostrings
+crayon
+generics
+IRanges
+rJava
+S4Vectors
+SELEX
+Seqinfo
+XVector

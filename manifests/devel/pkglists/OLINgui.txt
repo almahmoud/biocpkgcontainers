@@ -1,0 +1,10 @@
+DynDoc
+lattice
+limma
+locfit
+marray
+OLIN
+OLINgui
+statmod
+tkWidgets
+widgetTools

@@ -1,0 +1,12 @@
+BiocGenerics
+Biostrings
+BRAIN
+crayon
+generics
+IRanges
+lattice
+PolynomF
+Rcpp
+S4Vectors
+Seqinfo
+XVector

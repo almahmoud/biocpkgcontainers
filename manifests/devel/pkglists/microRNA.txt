@@ -1,0 +1,9 @@
+BiocGenerics
+Biostrings
+crayon
+generics
+IRanges
+microRNA
+S4Vectors
+Seqinfo
+XVector

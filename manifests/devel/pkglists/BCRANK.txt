@@ -1,0 +1,10 @@
+BCRANK
+BiocGenerics
+Biostrings
+crayon
+generics
+IRanges
+S4Vectors
+Seqinfo
+seqLogo
+XVector

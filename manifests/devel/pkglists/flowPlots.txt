@@ -1,0 +1,7 @@
+colorspace
+flowPlots
+lattice
+lmtest
+MASS
+vcd
+zoo

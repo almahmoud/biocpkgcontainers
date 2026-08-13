@@ -1,0 +1,6 @@
+evaluate
+highr
+knitr
+metaCCA
+xfun
+yaml

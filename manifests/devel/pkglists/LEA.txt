@@ -1,0 +1,6 @@
+evaluate
+highr
+knitr
+LEA
+xfun
+yaml

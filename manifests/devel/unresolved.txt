@@ -1,0 +1,13 @@
+biclust
+depmixS4
+fastshap
+granulator
+HDCI
+mfa
+NMI
+phenomis
+preseqR
+PRIMME
+pryr
+qs
+smoother

@@ -1,0 +1,9 @@
+clst
+evaluate
+highr
+knitr
+lattice
+ROC
+RUnit
+xfun
+yaml
