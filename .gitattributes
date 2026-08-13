@@ -1,0 +1,2 @@
+manifests/** linguist-generated=true
+manifests/**/manifest.json -diff
